@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="card">
+  <h2>建立桶档案</h2>
+  <p class="hint">先填桶容量（克，正整数）和各色目标质量比（正整数，至少两色）。目标比只表示相对比例，例如 3∶2 与 300g∶200g 等价。</p>
+  <form method="post" action="{{ url_for('bucket_setup') }}">
+    <label>桶容量（克，正整数）
+      <input type="number" name="capacity" min="1" step="1" required placeholder="例如 1000">
+    </label>
+    <table class="form-table" id="ratio-rows">
+      <thead><tr><th>颜色名</th><th>目标质量比（正整数）</th></tr></thead>
+      <tbody>
+        <tr><td><input name="color_name" placeholder="例如 青" required></td>
+            <td><input name="color_ratio" type="number" min="1" step="1" required placeholder="例如 3"></td></tr>
+        <tr><td><input name="color_name" placeholder="例如 品红" required></td>
+            <td><input name="color_ratio" type="number" min="1" step="1" required placeholder="例如 2"></td></tr>
+        <tr><td><input name="color_name" placeholder="颜色名（可留空删除本行）"></td>
+            <td><input name="color_ratio" type="number" min="1" step="1" placeholder="比例"></td></tr>
+        <tr><td><input name="color_name" placeholder="颜色名（可留空删除本行）"></td>
+            <td><input name="color_ratio" type="number" min="1" step="1" placeholder="比例"></td></tr>
+      </tbody>
+    </table>
+    <button type="button" onclick="addRow()">再加一行颜色</button>
+    <button type="submit" class="primary">保存桶档案</button>
+  </form>
+</section>
+
+<script>
+function addRow() {
+  const tbody = document.querySelector('#ratio-rows tbody');
+  const tr = document.createElement('tr');
+  tr.innerHTML = '<td><input name="color_name" placeholder="颜色名"></td>'
+    + '<td><input name="color_ratio" type="number" min="1" step="1" placeholder="比例"></td>';
+  tbody.appendChild(tr);
+}
+</script>
+{% endblock %}

@@ -1,0 +1,21 @@
+services:
+  ink-app:
+    build: .
+    image: spot-ink-weighing:latest
+    container_name: spot-ink-weighing
+    ports:
+      - "5000:5000"
+    environment:
+      INK_DB_PATH: /data/ink.db
+      SECRET_KEY: change-this-in-production
+    volumes:
+      - ink_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  ink_data:

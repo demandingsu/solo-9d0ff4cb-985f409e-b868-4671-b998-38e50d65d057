@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block content %}
+
+{# ---------- 合格状态横幅 ---------- #}
+<section class="card status {{ 'cert-ok' if cert.certified else ('cert-revoked' if cert.revoked else 'cert-no') }}">
+  <div>
+    <h2>
+      合格标志：
+      {% if cert.certified %}<span class="badge ok">合格</span>
+      {% elif cert.revoked %}<span class="badge revoked">已自动撤标</span>
+      {% else %}<span class="badge no">未合格</span>{% endif %}
+    </h2>
+    <p class="reason">{{ cert.reason }}</p>
+    {% if cert.latest %}
+      <p class="hint">最近核定时间：{{ cert.latest.created_at }} ｜ 核定结果：
+        {{ '通过' if cert.latest.passed else '未通过' }}（{{ cert.latest.reason }}）</p>
+    {% endif %}
+  </div>
+  <form method="post" action="{{ url_for('verify') }}">
+    <button type="submit" class="primary big">按最新实称核定</button>
+  </form>
+</section>
+
+{# ---------- 桶档案 ---------- #}
+<section class="card">
+  <h2>桶档案</h2>
+  <p>容量 <strong>{{ bucket.capacity }} g</strong> ｜ 目标质量比：
+    {% for color, r in ratios.items() %}
+      <span class="chip">{{ color }} {{ r }}</span>{% if not loop.last %} ∶ {% endif %}
+    {% endfor %}
+    （比例最大公约数 g = {{ g }}，共同倍数以 1/{{ g }} 为最小步进）
+  </p>
+  <details>
+    <summary>修改容量 / 目标比（改桶参数；称量单原始克数保留）</summary>
+    <form method="post" action="{{ url_for('bucket_setup') }}" class="inline-form">
+      <label>桶容量（克）
+        <input type="number" name="capacity" min="1" step="1" value="{{ bucket.capacity }}" required>
+      </label>
+      <table class="form-table">
+        <thead><tr><th>颜色名</th><th>目标质量比</th></tr></thead>
+        <tbody>
+        {% for color, r in ratios.items() %}
+          <tr><td><input name="color_name" value="{{ color }}" required></td>
+              <td><input name="color_ratio" type="number" min="1" step="1" value="{{ r }}" required></td></tr>
+        {% endfor %}
+          <tr><td><input name="color_name" placeholder="新颜色名（可留空）"></td>
+              <td><input name="color_ratio" type="number" min="1" step="1" placeholder="比例"></td></tr>
+        </tbody>
+      </table>
+      <button type="submit" class="primary">更新桶档案</button>
+    </form>
+  </details>
+</section>
+
+{# ---------- 当前实称与加料建议 ---------- #}
+<section class="card">
+  <h2>桶内最新实称与加料建议（只加料，不舀出）</h2>
+  <table class="data-table">
+    <thead>
+      <tr><th>颜色</th><th>目标比</th><th>当前实称 (g)</th><th>建议补料 (g)</th><th>补后总量 (g)</th></tr>
+    </thead>
+    <tbody>
+    {% for color in ratios %}
+      <tr>
+        <td>{{ color }}</td>
+        <td>{{ ratios[color] }}</td>
+        <td>{{ weights.get(color, 0) }}</td>
+        <td class="strong">{{ suggestion.additions[color] }}</td>
+        <td>{{ weights.get(color, 0) + suggestion.additions[color] }}</td>
+      </tr>
+    {% endfor %}
+      <tr class="sum">
+        <td>合计</td><td>—</td>
+        <td>{{ suggestion.current_total }} / {{ bucket.capacity }} g</td>
+        <td class="strong">{{ suggestion.add_total }}</td>
+        <td>{{ suggestion.target_total }} g</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="notice {{ 'stop' if suggestion.stop else ('ok' if suggestion.already_compliant else 'info') }}">
+    {% if suggestion.stop %}
+      <strong>⛔ 停配提示：</strong>{{ suggestion.message }}。当前已无法只靠加料恢复合格配比，请停止补配并上报处理。
+    {% elif suggestion.already_compliant %}
+      <strong>✅</strong> {{ suggestion.message }}
+    {% else %}
+      <strong>📋 加料方案：</strong>{{ suggestion.message }}；补后总量 {{ suggestion.target_total }}g ≤ 容量 {{ bucket.capacity }}g。
+    {% endif %}
+  </div>
+</section>
+
+{# ---------- 称量单登记 ---------- #}
+<section class="card">
+  <h2>登记称量单（实际入桶整数克数）</h2>
+  <p class="hint">同号单据只记一次：单号已存在时整单退回（改量也退回，请另开新单号）；入桶后超过桶容量同样退回。</p>
+  <form method="post" action="{{ url_for('ticket_create') }}">
+    <label class="ticket-no">称量单号
+      <input name="ticket_no" required placeholder="例如 C20261126-01">
+    </label>
+    <table class="form-table">
+      <thead><tr><th>颜色</th><th>本单入桶克数（整数，可为 0）</th></tr></thead>
+      <tbody>
+      {% for color in ratios %}
+        <tr><td>{{ color }}</td>
+            <td><input name="grams_{{ color }}" type="number" min="0" step="1" value="0" required></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <button type="submit" class="primary">提交称量单</button>
+  </form>
+</section>
+
+{# ---------- 称量单台账 ---------- #}
+<section class="card">
+  <h2>称量单台账（{{ tickets|length }} 张，按入账顺序）</h2>
+  {% if tickets %}
+  <table class="data-table">
+    <thead>
+      <tr><th>#</th><th>称量单号</th>
+        {% for color in ratios %}<th>{{ color }} (g)</th>{% endfor %}
+        <th>本单合计 (g)</th><th>入账时间</th></tr>
+    </thead>
+    <tbody>
+    {% for t in tickets %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td class="strong">{{ t.ticket_no }}</td>
+        {% for color in ratios %}<td>{{ t.weights.get(color, 0) }}</td>{% endfor %}
+        <td>{{ t.total_grams }}</td>
+        <td>{{ t.entered_at }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="hint">暂无称量单。</p>
+  {% endif %}
+</section>
+
+{# ---------- 核定历史 ---------- #}
+<section class="card">
+  <h2>核定记录</h2>
+  {% if verifications %}
+  <table class="data-table">
+    <thead><tr><th>时间</th><th>结果</th><th>核定时实称 (g)</th><th>原因</th></tr></thead>
+    <tbody>
+    {% for v in verifications %}
+      <tr>
+        <td>{{ v.created_at }}</td>
+        <td>{{ '合格' if v.passed else '不合格' }}</td>
+        <td>
+          {% for color in ratios %}{{ color }} {{ v.weights.get(color, 0) }}{% if not loop.last %}、{% endif %}{% endfor %}
+          （合计 {{ v.total_grams }}g）
+        </td>
+        <td>{{ v.reason }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="hint">暂无核定记录。</p>
+  {% endif %}
+</section>
+
+{# ---------- 危险操作 ---------- #}
+<section class="card danger-zone">
+  <h2>换桶 / 全部清空</h2>
+  <p class="hint">清空桶档案、全部称量单和核定记录，回到建档页。此操作不可恢复。</p>
+  <form method="post" action="{{ url_for('bucket_reset') }}"
+        onsubmit="return confirm('确认清空本桶全部数据？');">
+    <button type="submit" class="danger">清空全部数据</button>
+  </form>
+</section>
+
+{% endblock %}
