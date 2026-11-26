@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}分装原单 {{ order.order_no }} · 专色墨称量核定{% endblock %}
+{% block content %}
+
+<section class="card">
+  <h2>
+    分装原单 <span class="strong">{{ order.order_no }}</span>
+    {% if replayed %}<span class="badge ok">原单重交 · 未重复扣账</span>{% endif %}
+  </h2>
+  <p class="hint">
+    本页为入账时的快照，换桶/清空后仍长期保留，可凭单号随时查询。
+  </p>
+
+  <table class="data-table detail-table">
+    <tr><th style="width:180px">分装单号</th><td class="strong">{{ order.order_no }}</td></tr>
+    <tr><th>原桶批号</th><td class="strong">{{ order.batch_no }}
+      <span class="hint">（桶世代 #{{ order.bucket_generation }}）</span></td></tr>
+    <tr><th>原桶目标配比</th><td>
+      {% for color, r in order.ratios.items() %}
+        <span class="chip">{{ color }} {{ r }}</span>{% if not loop.last %} ∶ {% endif %}
+      {% endfor %}
+    </td></tr>
+    <tr><th>桶容量</th><td>{{ order.capacity_grams }} g（首单确认时墨量未超容量）</td></tr>
+    <tr><th>入账时桶内实称</th><td>
+      {% for color, g in order.mixed_weights.items() %}{{ color }} {{ g }}g{% if not loop.last %}、{% endif %}{% endfor %}
+      （合计 {{ order.mixed_total_grams }}g）
+    </td></tr>
+    <tr><th>各罐净重</th><td>
+      <ol class="can-list">
+        {% for w in order.can_weights %}
+          <li>第 {{ loop.index }} 罐：<strong>{{ w }}</strong> g</li>
+        {% endfor %}
+      </ol>
+      共 {{ order.can_count }} 罐，净重合计 <strong>{{ order.total_grams }}</strong> g
+    </td></tr>
+    <tr><th>入账时间</th><td>{{ order.created_at }}</td></tr>
+    {% if same_bucket and remaining is not none %}
+    <tr><th>当前桶最新余墨</th><td class="strong remain-num-inline">{{ remaining }} g
+      <span class="hint">（仅当该单属于当前桶时显示）</span></td></tr>
+    {% endif %}
+  </table>
+
+  <div class="actions-row">
+    <form method="post" action="{{ url_for('dispense_submit') }}" class="replay-form"
+          onsubmit="return confirm('按原内容原样重交该单号？系统只返回原单，不会重复扣账。');">
+      <input type="hidden" name="order_no" value="{{ order.order_no }}">
+      {% for w in order.can_weights %}
+        <input type="hidden" name="can_weight" value="{{ w }}">
+      {% endfor %}
+      <button type="submit" class="primary">原单照样重交（只返回原单）</button>
+    </form>
+    <a class="button-link" href="{{ url_for('index') }}">← 返回总览</a>
+  </div>
+  <p class="hint">注意：修改任何一罐净重后仍用此单号提交，会被以“同号改内容”退回。</p>
+</section>
+
+<section class="card" id="lookup">
+  <h2>继续查询其他分装单</h2>
+  <form method="get" action="{{ url_for('dispense_lookup') }}" class="lookup-form">
+    <input name="order_no" placeholder="输入分装单号">
+    <button type="submit" class="primary">查询</button>
+  </form>
+</section>
+
+{% endblock %}

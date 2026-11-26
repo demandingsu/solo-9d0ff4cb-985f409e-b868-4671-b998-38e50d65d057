@@ -1,6 +1,38 @@
 {% extends "base.html" %}
 {% block content %}
 
+{# ---------- 调配/分装阶段 + 余墨 ---------- #}
+<section class="card remaining-hero {{ 'is-closed' if closed else 'is-mixing' }}" id="remaining">
+  <div class="remain-main">
+    <h2>
+      桶批号 <span class="strong">{{ bucket.batch_no }}</span>
+      {% if closed %}
+        <span class="badge disp">调配已结束 · 分装中</span>
+      {% else %}
+        <span class="badge mixing">调配中</span>
+      {% endif %}
+    </h2>
+    {% if closed %}
+      <p class="remain-num">余墨 <strong>{{ remaining }}</strong> g</p>
+      <p class="hint">
+        首单分装时实称总量 {{ mixed_total }}g 已冻结，已分装扣账 {{ dispensed_total }}g；
+        余墨按最新整单扣减，不足整单退回。
+      </p>
+    {% else %}
+      <p class="remain-num">桶内实称 <strong>{{ mixed_total }}</strong> g
+        <span class="hint">（首张分装单入账并结束调配后，此处显示余墨）</span></p>
+      <p class="hint">首单交单前将按当时实称确认：配比达标、墨量未超桶容量、且够装本单。</p>
+    {% endif %}
+  </div>
+  <div class="lookup-box" id="lookup">
+    <h2>凭单号查分装原单（换桶后可查）</h2>
+    <form method="get" action="{{ url_for('dispense_lookup') }}" class="lookup-form">
+      <input name="order_no" placeholder="输入分装单号，如 FZ-001" aria-label="分装单号">
+      <button type="submit" class="primary">查询原桶批号/配比/各罐净重</button>
+    </form>
+  </div>
+</section>
+
 {# ---------- 合格状态横幅 ---------- #}
 <section class="card status {{ 'cert-ok' if cert.certified else ('cert-revoked' if cert.revoked else 'cert-no') }}">
   <div>
@@ -24,15 +56,21 @@
 {# ---------- 桶档案 ---------- #}
 <section class="card">
   <h2>桶档案</h2>
-  <p>容量 <strong>{{ bucket.capacity }} g</strong> ｜ 目标质量比：
+  <p>批号 <strong>{{ bucket.batch_no }}</strong> ｜ 容量 <strong>{{ bucket.capacity }} g</strong> ｜ 目标质量比：
     {% for color, r in ratios.items() %}
       <span class="chip">{{ color }} {{ r }}</span>{% if not loop.last %} ∶ {% endif %}
     {% endfor %}
     （比例最大公约数 g = {{ g }}，共同倍数以 1/{{ g }} 为最小步进）
   </p>
+  {% if closed %}
+    <p class="notice lock">🔒 首张分装单已入账、调配已结束：桶档（容量/配比/批号）修改已停止。</p>
+  {% else %}
   <details>
-    <summary>修改容量 / 目标比（改桶参数；称量单原始克数保留）</summary>
+    <summary>修改容量 / 目标比 / 批号（改桶参数；称量单原始克数保留）</summary>
     <form method="post" action="{{ url_for('bucket_setup') }}" class="inline-form">
+      <label>桶批号
+        <input type="text" name="batch_no" value="{{ bucket.batch_no }}">
+      </label>
       <label>桶容量（克）
         <input type="number" name="capacity" min="1" step="1" value="{{ bucket.capacity }}" required>
       </label>
@@ -50,6 +88,7 @@
       <button type="submit" class="primary">更新桶档案</button>
     </form>
   </details>
+  {% endif %}
 </section>
 
 {# ---------- 当前实称与加料建议 ---------- #}
@@ -88,9 +127,78 @@
   </div>
 </section>
 
+{# ---------- 分装单开单 ---------- #}
+<section class="card dispense-form-card">
+  <h2>开分装单（给机台分墨 · 填单号和各罐净重）</h2>
+  <p class="hint">
+    每一罐净重均为<strong>正整数克</strong>；交单按最新余墨<strong>整单扣账</strong>，余墨不足则整单退回。
+    同号同内容重交只返回原单、不重复扣账；同号改内容退回；换桶后旧页面里尚未入账的单也会退回。
+  </p>
+  <form method="post" action="{{ url_for('dispense_submit') }}"
+        id="dispense-form">
+    {# 旧桶页面识别令牌：换桶后世代/epoch/批号都会变 #}
+    <input type="hidden" name="bucket_epoch" value="{{ bucket.epoch }}">
+    <input type="hidden" name="epoch" value="{{ bucket.epoch }}">
+    <input type="hidden" name="bucket_generation" value="{{ bucket.generation }}">
+    <input type="hidden" name="generation" value="{{ bucket.generation }}">
+    <input type="hidden" name="bucket_id" value="{{ bucket.generation }}">
+    <input type="hidden" name="batch_no" value="{{ bucket.batch_no }}">
+
+    <label class="ticket-no">分装单号
+      <input name="order_no" required placeholder="例如 FZ-20261126-01" autocomplete="off">
+    </label>
+
+    <table class="form-table" id="can-rows">
+      <thead><tr><th style="width:60px">罐号</th><th>本罐净重（正整数 g）</th><th style="width:90px">操作</th></tr></thead>
+      <tbody>
+        <tr><td>第 1 罐</td><td><input name="can_weight" type="number" min="1" step="1" required placeholder="例如 200"></td>
+            <td><button type="button" class="row-del" onclick="removeCanRow(this)">删除</button></td></tr>
+        <tr><td>第 2 罐</td><td><input name="can_weight" type="number" min="1" step="1" required placeholder="例如 200"></td>
+            <td><button type="button" class="row-del" onclick="removeCanRow(this)">删除</button></td></tr>
+      </tbody>
+    </table>
+    <button type="button" onclick="addCanRow()">再加一罐</button>
+    <button type="submit" class="primary big">提交分装单（整单扣账）</button>
+  </form>
+</section>
+
+{# ---------- 当前桶分装台账 / 余墨 ---------- #}
+<section class="card">
+  <h2>本桶分装台账（{{ dispense_orders|length }} 张，按入账顺序；已扣 {{ dispensed_total }}g，余墨 {{ remaining }}g）</h2>
+  {% if dispense_orders %}
+  <table class="data-table">
+    <thead>
+      <tr><th>#</th><th>分装单号</th><th>罐数</th><th>各罐净重 (g)</th>
+        <th>合计 (g)</th><th>扣后余墨 (g)</th><th>入账时间</th><th>原单</th></tr>
+    </thead>
+    <tbody>
+    {% set ns = namespace(running=mixed_total) %}
+    {% for o in dispense_orders %}
+      {% set ns.running = ns.running - o.total_grams %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td class="strong">{{ o.order_no }}</td>
+        <td>{{ o.can_count }}</td>
+        <td>{% for w in o.can_weights %}#{{ loop.index }}={{ w }}{% if not loop.last %}，{% endif %}{% endfor %}</td>
+        <td>{{ o.total_grams }}</td>
+        <td class="strong">{{ ns.running }}</td>
+        <td>{{ o.created_at }}</td>
+        <td><a href="{{ url_for('dispense_detail', order_no=o.order_no) }}">查看原单</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="hint">暂无分装单。</p>
+  {% endif %}
+</section>
+
 {# ---------- 称量单登记 ---------- #}
 <section class="card">
   <h2>登记称量单（实际入桶整数克数）</h2>
+  {% if closed %}
+    <p class="notice lock">🔒 调配已结束，称量单停收（首张分装单 {{ dispense_orders[0].order_no if dispense_orders else '' }} 入账时关账）。</p>
+  {% else %}
   <p class="hint">同号单据只记一次：单号已存在时整单退回（改量也退回，请另开新单号）；入桶后超过桶容量同样退回。</p>
   <form method="post" action="{{ url_for('ticket_create') }}">
     <label class="ticket-no">称量单号
@@ -107,6 +215,7 @@
     </table>
     <button type="submit" class="primary">提交称量单</button>
   </form>
+  {% endif %}
 </section>
 
 {# ---------- 称量单台账 ---------- #}
@@ -164,11 +273,41 @@
 {# ---------- 危险操作 ---------- #}
 <section class="card danger-zone">
   <h2>换桶 / 全部清空</h2>
-  <p class="hint">清空桶档案、全部称量单和核定记录，回到建档页。此操作不可恢复。</p>
+  <p class="hint">清空当前桶档案、全部称量单和核定记录，回到建档页（即“换桶”）。<strong>分装单档案会保留</strong>，换桶后仍可在上方凭单号查询原桶批号、配比及各罐净重；旧桶页面里尚未入账的分装单再提交会被退回。此操作不可恢复当前桶数据。</p>
   <form method="post" action="{{ url_for('bucket_reset') }}"
-        onsubmit="return confirm('确认清空本桶全部数据？');">
-    <button type="submit" class="danger">清空全部数据</button>
+        onsubmit="return confirm('确认换桶/清空当前桶全部数据？历史分装单档案会保留。');">
+    <button type="submit" class="danger">换桶 / 清空当前桶数据</button>
   </form>
 </section>
+
+<script>
+function renumberCanRows() {
+  const rows = document.querySelectorAll('#can-rows tbody tr');
+  rows.forEach((tr, i) => {
+    const label = tr.querySelector('td:first-child');
+    if (label) label.textContent = '第 ' + (i + 1) + ' 罐';
+  });
+}
+function addCanRow() {
+  const tbody = document.querySelector('#can-rows tbody');
+  const tr = document.createElement('tr');
+  tr.innerHTML = '<td></td>'
+    + '<td><input name="can_weight" type="number" min="1" step="1" required placeholder="本罐净重（正整数 g）"></td>'
+    + '<td><button type="button" class="row-del" onclick="removeCanRow(this)">删除</button></td>';
+  tbody.appendChild(tr);
+  renumberCanRows();
+  tr.querySelector('input').focus();
+}
+function removeCanRow(btn) {
+  const tbody = document.querySelector('#can-rows tbody');
+  if (tbody.querySelectorAll('tr').length <= 1) {
+    // 只剩一行时清空输入而不是删行
+    tbody.querySelector('input').value = '';
+    return;
+  }
+  btn.closest('tr').remove();
+  renumberCanRows();
+}
+</script>
 
 {% endblock %}

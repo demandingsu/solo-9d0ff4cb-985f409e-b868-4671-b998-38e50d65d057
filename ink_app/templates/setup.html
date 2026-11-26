@@ -1,9 +1,12 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="card">
-  <h2>建立桶档案</h2>
-  <p class="hint">先填桶容量（克，正整数）和各色目标质量比（正整数，至少两色）。目标比只表示相对比例，例如 3∶2 与 300g∶200g 等价。</p>
+  <h2>建立桶档案（换桶后也在这里建新桶）</h2>
+  <p class="hint">先填桶批号、桶容量（克，正整数）和各色目标质量比（正整数，至少两色）。目标比只表示相对比例，例如 3∶2 与 300g∶200g 等价。批号留空会自动生成；分装单会快照批号与配比，换桶后仍可凭单号查询。</p>
   <form method="post" action="{{ url_for('bucket_setup') }}">
+    <label>桶批号（可留空自动生成）
+      <input type="text" name="batch_no" placeholder="例如 P20261126-A">
+    </label>
     <label>桶容量（克，正整数）
       <input type="number" name="capacity" min="1" step="1" required placeholder="例如 1000">
     </label>
@@ -22,6 +25,15 @@
     </table>
     <button type="button" onclick="addRow()">再加一行颜色</button>
     <button type="submit" class="primary">保存桶档案</button>
+  </form>
+</section>
+
+<section class="card" id="lookup">
+  <h2>凭分装单号查原桶批号 / 配比 / 各罐净重</h2>
+  <p class="hint">换桶或清空重建后，历史分装单档案仍保留，可直接查询。</p>
+  <form method="get" action="{{ url_for('dispense_lookup') }}" class="lookup-form">
+    <input name="order_no" placeholder="输入分装单号，例如 FZ-001">
+    <button type="submit" class="primary">查询原单</button>
   </form>
 </section>
 

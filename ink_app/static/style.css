@@ -77,3 +77,41 @@ button:hover { opacity: .88; }
 .inline-form { margin-top: 10px; }
 details { margin-top: 10px; }
 .danger-zone { border-color: #f2a9a9; }
+
+/* 余墨 / 阶段横幅 */
+.remaining-hero {
+  display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap;
+  border-left: 6px solid #12355b; background: #f0f6fd;
+}
+.remaining-hero.is-closed { border-left-color: #1a7f4b; background: #f1fbf6; }
+.remaining-hero.is-mixing { border-left-color: #b7791f; background: #fffaf0; }
+.remain-main { min-width: 280px; flex: 1 1 320px; }
+.remain-num { font-size: 18px; margin: 8px 0 4px; }
+.remain-num strong { font-size: 34px; color: #12355b; padding: 0 4px; }
+.is-closed .remain-num strong { color: #1a7f4b; }
+.remain-num-inline { font-size: 18px; color: #1a7f4b; }
+.badge.disp { background: #1a7f4b; color: #fff; }
+.badge.mixing { background: #b7791f; color: #fff; }
+
+.lookup-box { flex: 1 1 320px; min-width: 280px; }
+.lookup-box h2 { font-size: 15px; }
+.lookup-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.lookup-form input { flex: 1 1 220px; min-width: 200px; padding: 9px 10px; border: 1px solid #bcccdc; border-radius: 6px; }
+.lookup-form button { margin: 0; }
+
+.notice.lock { background: #eef2f6; border: 1px solid #bcccdc; color: #334e68; font-weight: 600; }
+
+.dispense-form-card { border-top: 4px solid #1a7f4b; }
+#can-rows td input { width: 100%; }
+.row-del { padding: 4px 10px; font-size: 13px; margin: 0; }
+
+.can-list { margin: 6px 0; padding-left: 22px; }
+.can-list li { margin: 2px 0; }
+.detail-table th { width: 190px; background: #f0f4f8; }
+.actions-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 12px; }
+.replay-form { margin: 0; }
+.button-link {
+  display: inline-block; padding: 8px 14px; border: 1px solid #12355b;
+  border-radius: 8px; text-decoration: none; color: #12355b; font-size: 14px;
+}
+a { color: #1d5fa8; }

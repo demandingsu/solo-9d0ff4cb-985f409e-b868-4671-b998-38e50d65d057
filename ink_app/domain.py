@@ -54,6 +54,75 @@ def total(weights: Mapping[str, int]) -> int:
     return sum(int(v) for v in weights.values())
 
 
+def ratio_match(
+    weights: Mapping[str, int], ratios: Mapping[str, int]
+) -> Tuple[bool, str]:
+    """只判断桶里有料且实际配比与目标比完全一致（不检查容量）。"""
+    if not ratios:
+        return False, "缺少目标配比"
+    if total(weights) == 0:
+        return False, "桶里无料"
+    base: Optional[Fraction] = None
+    for color, r in ratios.items():
+        w = int(weights.get(color, 0))
+        if w <= 0:
+            return False, f"{color} 未入料，配比不完整"
+        frac = Fraction(w, int(r))
+        if base is None:
+            base = frac
+        elif frac != base:
+            return False, "实际配比与目标比不一致"
+    return True, "配比达标"
+
+
+def _coerce_positive_int(raw: object, index: int) -> int:
+    """把单个罐净重输入转为正整数；布尔值/小数/非数字一律拒绝。"""
+    label = f"第 {index} 罐净重"
+    if isinstance(raw, bool):
+        raise ValueError(f"{label}必须是正整数克，收到：{raw}")
+    if isinstance(raw, int):
+        value = raw
+    elif isinstance(raw, float):
+        if not raw.is_integer():
+            raise ValueError(f"{label}必须是正整数克，收到：{raw}")
+        value = int(raw)
+    else:
+        text = str(raw).strip()
+        if not text:
+            raise ValueError(f"{label}不能为空")
+        try:
+            # 拒绝 3.5 / 10.0 这类带小数点的写法：必须是整数字面量
+            value = int(text)
+        except (TypeError, ValueError):
+            raise ValueError(f"{label}必须是正整数克，收到：{text}") from None
+    if value <= 0:
+        raise ValueError(f"{label}必须是正整数克，收到：{value}")
+    return value
+
+
+def parse_can_weights(values, *, skip_blank: bool = True) -> list[int]:
+    """解析“各罐净重”：每一罐都必须是正整数克，至少一罐。
+
+    表单动态行会提交空字符串，``skip_blank=True`` 时忽略空行；
+    JSON 接口显式给出的空值可传 ``skip_blank=False`` 严格报错。
+    """
+    cans: list[int] = []
+    for idx, raw in enumerate(values, start=1):
+        if raw is None or (isinstance(raw, str) and not raw.strip()):
+            if skip_blank:
+                continue
+            raise ValueError(f"第 {idx} 罐净重不能为空")
+        cans.append(_coerce_positive_int(raw, idx))
+    if not cans:
+        raise ValueError("至少要填写一罐的净重，且每罐净重均为正整数克")
+    return cans
+
+
+def remaining_grams(mixed_total: int, dispensed_total: int) -> int:
+    """总览余墨 = 当时实称总量 - 已成功分装扣账总量。"""
+    return int(mixed_total) - int(dispensed_total)
+
+
 def is_compliant(
     weights: Mapping[str, int],
     ratios: Mapping[str, int],
@@ -65,21 +134,11 @@ def is_compliant(
     桶里有料、配比与目标比完全一致、总量不超过容量。
     """
     current_total = total(weights)
-    if current_total == 0:
-        return False, "桶里无料"
+    ratio_ok, reason = ratio_match(weights, ratios)
+    if not ratio_ok:
+        return False, reason
     if current_total > int(capacity):
         return False, f"实称总量 {current_total}g 已超容量 {capacity}g"
-    # 用分数精确比较 w_i / r_i 是否全部相等（且没有缺色/零料色失配）
-    base: Optional[Fraction] = None
-    for color, r in ratios.items():
-        w = int(weights.get(color, 0))
-        if w <= 0:
-            return False, f"{color} 未入料，配比不完整"
-        frac = Fraction(w, int(r))
-        if base is None:
-            base = frac
-        elif frac != base:
-            return False, "实际配比与目标比不一致"
     return True, "有料、配比正确且未超容量"
 
 
@@ -124,3 +183,13 @@ def load_weights(payload: Optional[str]) -> Dict[str, int]:
     if not payload:
         return {}
     return {str(k): int(v) for k, v in json.loads(payload).items()}
+
+
+def dump_list(values) -> str:
+    return json.dumps([int(v) for v in values], ensure_ascii=False)
+
+
+def load_list(payload: Optional[str]) -> list[int]:
+    if not payload:
+        return []
+    return [int(v) for v in json.loads(payload)]
